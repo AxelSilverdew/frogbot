@@ -1,0 +1,5 @@
+homeserver = "https://myserver.example.com/"
+display_name = "MyBot"
+username = "mybot"
+# Change this, seriously, do it
+password = "supersecretpassword"
