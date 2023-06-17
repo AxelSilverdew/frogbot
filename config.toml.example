@@ -1,5 +1,8 @@
 homeserver = "https://myserver.example.com/"
 display_name = "MyBot"
 username = "mybot"
-# Change this, seriously, do it
-password = "supersecretpassword"
+# change this, seriously, do it
+password = "changeme"
+# List of room IDs that the bot will join
+# All other rooms are ignored
+room_ids = ["!myid:myserver.example.com"]
