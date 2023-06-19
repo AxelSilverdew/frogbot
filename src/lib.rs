@@ -85,7 +85,10 @@ pub async fn delete_old_encryption_devices(client: &Client, config: &Config) -> 
     Ok(())
 }
 
-/// Rejects invites that aren't valid anymore or have timed out.
+/// Rejects invites that are waiting to be processed.
+///
+/// The bot will reject invites to spaces and DMs, as well as invites to any rooms it wasn't
+/// configured to explicitly join, while accepting invites to any rooms it was configured to join.
 pub async fn reject_stale_invites(client: &Client, config: &Config) {
     warn!("Rejecting stale invites");
     for room in client.invited_rooms() {
