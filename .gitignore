@@ -1,3 +1,5 @@
 /target
 config.toml
 Cargo.lock
+.idea
+.DS_Store
