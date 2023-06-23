@@ -7,7 +7,7 @@ use log::warn;
 use matrix_sdk::{
     room::Room,
     ruma::events::room::message::{
-        MessageType, OriginalSyncRoomMessageEvent, RoomMessageEventContent,
+        MessageType, OriginalSyncRoomMessageEvent, Relation, RoomMessageEventContent,
     },
     Client,
 };
@@ -95,6 +95,15 @@ fn get_urls_from_message(message: &str) -> Vec<&str> {
 pub async fn embed_handler(event: OriginalSyncRoomMessageEvent, room: Room, client: Client) {
     if let Room::Joined(room) = room {
         let full_reply_event = event.clone().into_full_event(room.room_id().to_owned());
+
+        // Do not make an embed if someone replies to a URL
+        // Unfortunately, this makes it so that if your reply has a URL, it will not embed.
+        if let Some(Relation::Reply { in_reply_to: _ }) = &event.content.relates_to {
+            warn!("Ignoring message, it's a reply to someone else");
+            return;
+        }
+
+        // Ignore anything that isn't text
         let MessageType::Text(text_content) = event.content.msgtype else {
             warn!("Ignoring message, content is not plaintext!");
             return;
