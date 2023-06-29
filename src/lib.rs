@@ -90,7 +90,7 @@ pub async fn delete_old_encryption_devices(client: &Client, config: &Config) -> 
 /// The bot will reject invites to spaces and DMs, as well as invites to any rooms it wasn't
 /// configured to explicitly join, while accepting invites to any rooms it was configured to join.
 pub async fn reject_stale_invites(client: &Client, config: &Config) {
-    warn!("Rejecting stale invites");
+    warn!("Checking invites");
     for room in client.invited_rooms() {
         let room_name = room.name().unwrap_or_default();
         if !room.is_space()
@@ -114,7 +114,7 @@ pub async fn reject_stale_invites(client: &Client, config: &Config) {
             room.reject_invitation().await.unwrap_or_default();
         }
     }
-    warn!("Finished rejecting stale invites");
+    warn!("Finished checking old invites");
 }
 
 /// Run frogbot

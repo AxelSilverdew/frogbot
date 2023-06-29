@@ -41,8 +41,8 @@ pub fn parse_metadata(page: &str) -> Embed {
     let title = doc_body.select(&title_selector).next();
     let desc = doc_body.select(&description_selector).next();
     // Clean up meta info and store it as a string
-    let mut meta_title = String::from("None");
-    let mut meta_description = String::from("None");
+    let mut meta_title = String::default();
+    let mut meta_description = String::default();
 
     if let Some(title) = title {
         meta_title = title.text().collect();
@@ -76,8 +76,8 @@ fn get_urls_from_message(message: &str) -> Vec<&str> {
         // If we find any urls, push them into the urls vec
         for regex_match in RE.find_iter(message) {
             // If the url points to localhost, we don't want to embed it, so we ignore it
-            if regex_match.as_str().contains("localhost")
-                || regex_match.as_str().contains("127.0.0.1")
+            if regex_match.as_str().to_lowercase().contains("localhost")
+                || regex_match.as_str().to_lowercase().contains("127.0.0.1")
             {
                 warn!("This is probably a malicious URL, ignoring!");
             } else {
@@ -96,10 +96,18 @@ pub async fn embed_handler(event: OriginalSyncRoomMessageEvent, room: Room, clie
     if let Room::Joined(room) = room {
         let full_reply_event = event.clone().into_full_event(room.room_id().to_owned());
 
+        // If the sender ID matches our client, ignore the message
+        // We don't want to reply to ourselves
+        let client_user_id = client.user_id().unwrap();
+        if event.sender == client_user_id {
+            return;
+        }
+
         // Do not make an embed if someone replies to a URL
         // Unfortunately, this makes it so that if your reply has a URL, it will not embed.
+        // TODO: Fix this by scanning replies and only generating embeds for new URLs in future.
         if let Some(Relation::Reply { in_reply_to: _ }) = &event.content.relates_to {
-            warn!("Ignoring message, it's a reply to someone else");
+            warn!("Ignoring message, it's a reply to someone else!");
             return;
         }
 
@@ -109,15 +117,7 @@ pub async fn embed_handler(event: OriginalSyncRoomMessageEvent, room: Room, clie
             return;
         };
 
-        // If the sender ID matches our client, ignore the message
-        // We don't want to reply to ourselves
-        let client_user_id = client.user_id().unwrap();
-        if event.sender == client_user_id {
-            return;
-        }
-
-        let message = text_content.body.to_lowercase();
-        let urls = get_urls_from_message(&message);
+        let urls = get_urls_from_message(&text_content.body);
 
         let reqwest_client = reqwest::Client::builder().user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36").build().unwrap();
 
