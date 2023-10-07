@@ -57,8 +57,15 @@ pub fn parse_metadata(page: &str) -> Option<Embed> {
             meta_description = desc.value().attr("content").unwrap().to_string();
         }
         // Handle logging of parse failures
-        (Some(_), None) => warn!("Failed to parse description HTML"),
-        (None, Some(_)) => warn!("Failed to parse title HTML"),
+        // and set values to whatever we *did* manage to scrape
+        (Some(title), None) => {
+            warn!("Failed to parse description HTML");
+            meta_title = title.text().collect();
+        }
+        (None, Some(desc)) => {
+            warn!("Failed to parse title HTML");
+            meta_description = desc.value().attr("content").unwrap().to_string();
+        }
     }
 
     Some(Embed::new(meta_title, meta_description))
