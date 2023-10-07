@@ -15,6 +15,7 @@ use regex::Regex;
 use scraper::{Html, Selector};
 
 /// Represents an Embed in the chat
+#[derive(Default)]
 pub struct Embed {
     /// The title of the embed
     pub title: String,
@@ -30,7 +31,7 @@ impl Embed {
 }
 
 /// Scrapes the HTML of a webpage and generates an [`Embed`] with the scraped information.
-pub fn parse_metadata(page: &str) -> Embed {
+pub fn parse_metadata(page: &str) -> Option<Embed> {
     let doc_body = Html::parse_document(page);
 
     // Selectors used to get metadata are defined here
@@ -44,19 +45,23 @@ pub fn parse_metadata(page: &str) -> Embed {
     let mut meta_title = String::default();
     let mut meta_description = String::default();
 
-    if let Some(title) = title {
-        meta_title = title.text().collect();
-    } else {
-        warn!("Failed to parse title HTML");
+    match (title, desc) {
+        // If both title and description aren't found return None
+        (None, None) => {
+            warn!("Couldn't parse any metadata for URL");
+            return None;
+        },
+        // Otherwise set the title/description to whatever we find
+        (Some(title), Some(desc)) => {
+            meta_title = title.text().collect();
+            meta_description = desc.value().attr("content").unwrap().to_string();
+        }
+        // Handle logging of parse failures
+        (Some(_), None) => warn!("Failed to parse description HTML"),
+        (None, Some(_)) => warn!("Failed to parse title HTML"),
     }
 
-    if let Some(desc) = desc {
-        meta_description = desc.value().attr("content").unwrap().to_string();
-    } else {
-        warn!("Failed to parse description HTML");
-    }
-
-    Embed::new(meta_title, meta_description)
+    Some(Embed::new(meta_title, meta_description))
 }
 
 /// Check if the message has any urls in it and get them if it does
@@ -119,15 +124,22 @@ pub async fn embed_handler(event: OriginalSyncRoomMessageEvent, room: Room, clie
 
         let urls = get_urls_from_message(&text_content.body);
 
-        let reqwest_client = reqwest::Client::builder().user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36").build().unwrap();
+        let reqwest_client = reqwest::Client::builder().user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36").build().unwrap();
 
-        for url in urls {
+        for mut url in urls {
             if let Ok(req) = reqwest_client.get(url).send().await {
                 if let Ok(res) = req.text().await {
                     // beware, dirty HTML parsing code
-                    let embed = parse_metadata(&res);
+                    let metadata = parse_metadata(&res);
+
+                    // If we didn't get any metadata set URL to nothing so it won't get repeated
+                    // With no other embed data in the bot's embed message
+                    if metadata.is_none() {
+                        url = "";
+                    }
 
                     // Build our message reply
+                    let embed = metadata.unwrap_or(Embed::new("No metadata found".to_string(), "".to_string()));
                     let bot_reply = RoomMessageEventContent::text_html(
                         &embed.title,
                         format!(
