@@ -142,7 +142,10 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
         .expect("frogbot couldn't log into it's account.");
 
     // Set the bot account's display name according to config
-    client.account().set_display_name(Some(&config.display_name)).await?;
+    client
+        .account()
+        .set_display_name(Some(&config.display_name))
+        .await?;
 
     warn!("Logged in successfully!");
     warn!(

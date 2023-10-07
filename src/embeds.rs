@@ -50,7 +50,7 @@ pub fn parse_metadata(page: &str) -> Option<Embed> {
         (None, None) => {
             warn!("Couldn't parse any metadata for URL");
             return None;
-        },
+        }
         // Otherwise set the title/description to whatever we find
         (Some(title), Some(desc)) => {
             meta_title = title.text().collect();
@@ -139,7 +139,8 @@ pub async fn embed_handler(event: OriginalSyncRoomMessageEvent, room: Room, clie
                     }
 
                     // Build our message reply
-                    let embed = metadata.unwrap_or(Embed::new("No metadata found".to_string(), "".to_string()));
+                    let embed = metadata
+                        .unwrap_or(Embed::new("No metadata found".to_string(), "".to_string()));
                     let bot_reply = RoomMessageEventContent::text_html(
                         &embed.title,
                         format!(
