@@ -45,27 +45,21 @@ pub fn parse_metadata(page: &str) -> Option<Embed> {
     let mut meta_title = String::default();
     let mut meta_description = String::default();
 
-    match (title, desc) {
-        // If both title and description aren't found return None
-        (None, None) => {
-            warn!("Couldn't parse any metadata for URL");
-            return None;
-        }
-        // Otherwise set the title/description to whatever we find
-        (Some(title), Some(desc)) => {
-            meta_title = title.text().collect();
-            meta_description = desc.value().attr("content").unwrap().to_string();
-        }
-        // Handle logging of parse failures
-        // and set values to whatever we *did* manage to scrape
-        (Some(title), None) => {
-            warn!("Failed to parse description HTML");
-            meta_title = title.text().collect();
-        }
-        (None, Some(desc)) => {
-            warn!("Failed to parse title HTML");
-            meta_description = desc.value().attr("content").unwrap().to_string();
-        }
+    if let (None, None) = (title, desc) {
+        warn!("Couldn't parse any metadata for URL");
+        return None;
+    }
+
+    if let Some(title) = title {
+        meta_title = title.text().collect();
+    } else {
+        warn!("Failed to parse title HTML");
+    }
+
+    if let Some(desc) = desc {
+        meta_description = desc.value().attr("content").unwrap().to_string();
+    } else {
+        warn!("Failed to parse description HTML");
     }
 
     Some(Embed::new(meta_title, meta_description))
