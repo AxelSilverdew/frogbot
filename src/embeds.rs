@@ -127,46 +127,50 @@ pub async fn embed_handler(event: OriginalSyncRoomMessageEvent, room: Room, clie
 
         let reqwest_client = reqwest::Client::builder().user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36").build().unwrap();
 
-        for mut url in urls {
+        for url in urls {
             if let Ok(req) = reqwest_client.get(url).send().await {
                 if let Ok(res) = req.text().await {
                     // beware, dirty HTML parsing code
                     let metadata = parse_metadata(&res);
 
-                    // If we didn't get any metadata set URL to nothing so it won't get repeated
-                    // With no other embed data in the bot's embed message
-                    if metadata.is_none() {
-                        url = "";
-                    }
+                    // Build and send our message reply
+                    if metadata.is_some() {
+                        let embed = metadata.unwrap();
+                        let bot_reply = RoomMessageEventContent::text_html(
+                            &embed.title,
+                            format!(
+                                "<blockquote>
+                                <h4>{}</h4>
+                                <p>{}</p>
+                                </blockquote>",
+                                &embed.title, &embed.description
+                            ),
+                        )
+                        .make_reply_to(&full_reply_event);
 
-                    // Build our message reply
-                    let embed = metadata
-                        .unwrap_or(Embed::new("No metadata found".to_string(), "".to_string()));
-                    let bot_reply = RoomMessageEventContent::text_html(
-                        &embed.title,
-                        format!(
-                            r#"
-                                <blockquote>
-                                    <h6><a href="{}">{}</a></h6>
-                                    <h3><strong>{}</strong></h3>
-                                    <p>{}</p>
-                                </blockquote>
-                        "#,
-                            &url, &url, &embed.title, &embed.description
-                        ),
-                    )
-                    .make_reply_to(&full_reply_event);
-
-                    // Finally send the reply to the room
-                    warn!("Sending embed for URL: '{}'", &url);
-                    if room.send(bot_reply, None).await.is_err() {
-                        warn!("Failed to send embed for URL: '{}'", &url);
+                        // Finally send the reply to the room
+                        warn!("Sending embed for URL: '{}'", &url);
+                        if room.send(bot_reply, None).await.is_err() {
+                            warn!("Failed to send embed for URL: '{}'", &url);
+                        }
+                    // If we didn't get any metadata send a generic "No metadata" response
+                    } else {
+                        let bot_reply = RoomMessageEventContent::text_html(
+                            "Couldn't parse metadata for URL",
+                            "<blockquote><h5>Couldn't parse metadata for URL</h5></blockquote>",
+                        )
+                        .make_reply_to(&full_reply_event);
+                        // Send the reply to the room
+                        warn!("Sending 'No metadata' embed for URL: '{}'", &url);
+                        if room.send(bot_reply, None).await.is_err() {
+                            warn!("Failed to send embed for URL: '{}'", &url);
+                        }
                     }
                 } else {
                     warn!("Failed to parse HTML for URL: '{}'", &url);
                 }
             } else {
-                warn!("Failed to get metadata for '{}'", &url);
+                warn!("Failed to fetch metadata for '{}'", &url);
             }
         }
     };
