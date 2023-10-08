@@ -15,6 +15,7 @@ use regex::Regex;
 use scraper::{Html, Selector};
 
 /// Represents an Embed in the chat
+#[derive(Default)]
 pub struct Embed {
     /// The title of the embed
     pub title: String,
@@ -30,7 +31,7 @@ impl Embed {
 }
 
 /// Scrapes the HTML of a webpage and generates an [`Embed`] with the scraped information.
-pub fn parse_metadata(page: &str) -> Embed {
+pub fn parse_metadata(page: &str) -> Option<Embed> {
     let doc_body = Html::parse_document(page);
 
     // Selectors used to get metadata are defined here
@@ -44,6 +45,11 @@ pub fn parse_metadata(page: &str) -> Embed {
     let mut meta_title = String::default();
     let mut meta_description = String::default();
 
+    if let (None, None) = (title, desc) {
+        warn!("Couldn't parse any metadata for URL");
+        return None;
+    }
+
     if let Some(title) = title {
         meta_title = title.text().collect();
     } else {
@@ -56,7 +62,7 @@ pub fn parse_metadata(page: &str) -> Embed {
         warn!("Failed to parse description HTML");
     }
 
-    Embed::new(meta_title, meta_description)
+    Some(Embed::new(meta_title, meta_description))
 }
 
 /// Check if the message has any urls in it and get them if it does
@@ -119,40 +125,52 @@ pub async fn embed_handler(event: OriginalSyncRoomMessageEvent, room: Room, clie
 
         let urls = get_urls_from_message(&text_content.body);
 
-        let reqwest_client = reqwest::Client::builder().user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36").build().unwrap();
+        let reqwest_client = reqwest::Client::builder().user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36").build().unwrap();
 
         for url in urls {
             if let Ok(req) = reqwest_client.get(url).send().await {
                 if let Ok(res) = req.text().await {
                     // beware, dirty HTML parsing code
-                    let embed = parse_metadata(&res);
+                    let metadata = parse_metadata(&res);
 
-                    // Build our message reply
-                    let bot_reply = RoomMessageEventContent::text_html(
-                        &embed.title,
-                        format!(
-                            r#"
-                                <blockquote>
-                                    <h6><a href="{}">{}</a></h6>
-                                    <h3><strong>{}</strong></h3>
-                                    <p>{}</p>
-                                </blockquote>
-                        "#,
-                            &url, &url, &embed.title, &embed.description
-                        ),
-                    )
-                    .make_reply_to(&full_reply_event);
+                    // Build and send our message reply
+                    if metadata.is_some() {
+                        let embed = metadata.unwrap();
+                        let bot_reply = RoomMessageEventContent::text_html(
+                            &embed.title,
+                            format!(
+                                "<blockquote>
+                                <h4>{}</h4>
+                                <p>{}</p>
+                                </blockquote>",
+                                &embed.title, &embed.description
+                            ),
+                        )
+                        .make_reply_to(&full_reply_event);
 
-                    // Finally send the reply to the room
-                    warn!("Sending embed for URL: '{}'", &url);
-                    if room.send(bot_reply, None).await.is_err() {
-                        warn!("Failed to send embed for URL: '{}'", &url);
+                        // Finally send the reply to the room
+                        warn!("Sending embed for URL: '{}'", &url);
+                        if room.send(bot_reply, None).await.is_err() {
+                            warn!("Failed to send embed for URL: '{}'", &url);
+                        }
+                    // If we didn't get any metadata send a generic "No metadata" response
+                    } else {
+                        let bot_reply = RoomMessageEventContent::text_html(
+                            "Couldn't parse metadata for URL",
+                            "<blockquote><h5>Couldn't parse metadata for URL</h5></blockquote>",
+                        )
+                        .make_reply_to(&full_reply_event);
+                        // Send the reply to the room
+                        warn!("Sending 'No metadata' embed for URL: '{}'", &url);
+                        if room.send(bot_reply, None).await.is_err() {
+                            warn!("Failed to send embed for URL: '{}'", &url);
+                        }
                     }
                 } else {
                     warn!("Failed to parse HTML for URL: '{}'", &url);
                 }
             } else {
-                warn!("Failed to get metadata for '{}'", &url);
+                warn!("Failed to fetch metadata for '{}'", &url);
             }
         }
     };
