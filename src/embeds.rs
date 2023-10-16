@@ -14,8 +14,9 @@ use matrix_sdk::{
 use regex::Regex;
 use scraper::{Html, Selector};
 
+use std::time::Instant;
+
 /// Represents an Embed in the chat
-#[derive(Default)]
 pub struct Embed {
     /// The title of the embed
     pub title: String,
@@ -46,20 +47,15 @@ pub fn parse_metadata(page: &str) -> Option<Embed> {
     let mut meta_description = String::default();
 
     if let (None, None) = (title, desc) {
-        warn!("Couldn't parse any metadata for URL");
         return None;
     }
 
     if let Some(title) = title {
         meta_title = title.text().collect();
-    } else {
-        warn!("Failed to parse title HTML");
     }
 
     if let Some(desc) = desc {
         meta_description = desc.value().attr("content").unwrap().to_string();
-    } else {
-        warn!("Failed to parse description HTML");
     }
 
     Some(Embed::new(meta_title, meta_description))
@@ -87,7 +83,7 @@ fn get_urls_from_message(message: &str) -> Vec<&str> {
             {
                 warn!("This is probably a malicious URL, ignoring!");
             } else {
-                warn!("Found {}", &regex_match.as_str());
+                warn!("Found '{}'", &regex_match.as_str());
                 urls.push(regex_match.as_str());
             }
         }
@@ -99,6 +95,8 @@ fn get_urls_from_message(message: &str) -> Vec<&str> {
 
 /// Checks messages for valid links and generates embeds if found
 pub async fn embed_handler(event: OriginalSyncRoomMessageEvent, room: Room, client: Client) {
+    let fn_start = Instant::now();
+
     if let Room::Joined(room) = room {
         let full_reply_event = event.clone().into_full_event(room.room_id().to_owned());
 
@@ -113,17 +111,16 @@ pub async fn embed_handler(event: OriginalSyncRoomMessageEvent, room: Room, clie
         // Unfortunately, this makes it so that if your reply has a URL, it will not embed.
         // TODO: Fix this by scanning replies and only generating embeds for new URLs in future.
         if let Some(Relation::Reply { in_reply_to: _ }) = &event.content.relates_to {
-            warn!("Ignoring message, it's a reply to someone else!");
             return;
         }
 
         // Ignore anything that isn't text
         let MessageType::Text(text_content) = event.content.msgtype else {
-            warn!("Ignoring message, content is not plaintext!");
             return;
         };
 
         let urls = get_urls_from_message(&text_content.body);
+        warn!("Ran fn get_urls_from_message after: '{:#?}'", fn_start.elapsed());
 
         let reqwest_client = reqwest::Client::builder().user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36").build().unwrap();
 
@@ -132,6 +129,7 @@ pub async fn embed_handler(event: OriginalSyncRoomMessageEvent, room: Room, clie
                 if let Ok(res) = req.text().await {
                     // beware, dirty HTML parsing code
                     let metadata = parse_metadata(&res);
+                    warn!("Ran fn parse_metadata after: '{:#?}'", fn_start.elapsed());
 
                     // Build and send our message reply
                     if metadata.is_some() {
@@ -153,6 +151,7 @@ pub async fn embed_handler(event: OriginalSyncRoomMessageEvent, room: Room, clie
                         if room.send(bot_reply, None).await.is_err() {
                             warn!("Failed to send embed for URL: '{}'", &url);
                         }
+                        warn!("Ran fn room.send after: '{:#?}'", fn_start.elapsed());
                     // If we didn't get any metadata send a generic "No metadata" response
                     } else {
                         let bot_reply = RoomMessageEventContent::text_html(
@@ -165,6 +164,7 @@ pub async fn embed_handler(event: OriginalSyncRoomMessageEvent, room: Room, clie
                         if room.send(bot_reply, None).await.is_err() {
                             warn!("Failed to send embed for URL: '{}'", &url);
                         }
+                        warn!("Ran fn room.send after: '{:#?}'", fn_start.elapsed());
                     }
                 } else {
                     warn!("Failed to parse HTML for URL: '{}'", &url);
