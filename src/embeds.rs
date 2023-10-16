@@ -120,8 +120,6 @@ pub async fn embed_handler(event: OriginalSyncRoomMessageEvent, room: Room, clie
         };
 
         let urls = get_urls_from_message(&text_content.body);
-        warn!("Ran fn get_urls_from_message after: '{:#?}'", fn_start.elapsed());
-
         let reqwest_client = reqwest::Client::builder().user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36").build().unwrap();
 
         for url in urls {
